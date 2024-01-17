@@ -1,0 +1,9 @@
+#! /bin/bash
+# This script is equivalent to ./run-container build-image.  It is
+# maintained for backward-compatibility with older instructions.
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+MAIN_SCRIPT="${SCRIPT_DIR}/../cs300-run-docker"
+
+${MAIN_SCRIPT} setup

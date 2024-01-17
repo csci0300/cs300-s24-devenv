@@ -1,0 +1,11 @@
+*~
+\#*#
+.\#*
+
+.DS_Store
+
+.vagrant/
+.vscode
+.gitconfig
+.bash_history
+home/

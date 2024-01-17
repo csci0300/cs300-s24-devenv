@@ -1,0 +1,12 @@
+[submodule "cs61-sections"]
+	path = home/cs61-sections
+	url = https://github.com/cs61/cs61-sections.git
+[submodule "cs61-f21-psets"]
+	path = home/cs61-psets
+	url = https://github.com/cs61/cs61-f21-psets.git
+[submodule "cs300-s21-labs"]
+	path = home/cs300-s21-labs
+	url = https://github.com/csci0300/cs300-s21-labs.git
+[submodule "cs300-s21-projects"]
+	path = home/cs300-s21-projects
+	url = https://github.com/vic-shihang-li/cs300-s21-projects

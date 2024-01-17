@@ -1,0 +1,8 @@
+# Force unix newlines on all platforms
+*.sh text eol=lf
+/cs300-run-docker text eol=lf
+/docker/cs300-* text eol=lf
+/docker/Dockerfile*
+/home/.bash* text eol=lf
+/home/.profile text eol=lf
+/home/.gdbinit text eol=lf
