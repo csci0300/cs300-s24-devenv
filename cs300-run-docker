@@ -7,8 +7,7 @@ maindir=""
 container_name=cs300-container
 network_name=cs300-network
 github_org=csci0300
-user_home="/home/cs300-user"  # User's home dir inside container
-
+default_user="cs300-user"  # Username to use by default
 
 image_name=cs300
 image_url="ghcr.io/${github_org}/${image_name}"
@@ -23,6 +22,27 @@ arch="`uname -m`"
 # Set automatically by platform detection
 tag=
 platform=
+
+container_runtime=docker
+__find_container_runtime()
+{
+    if $(which docker > /dev/null) ; then
+	if [ -n "$(docker --version | grep -i podman > /dev/null)" ]; then  # Is docker actually an alias for podman?
+	    container_runtime=podman
+	else
+	    container_runtime=docker
+	fi
+    elif $(which podman > /dev/null) ; then
+	container_runtime=podman
+    else
+	# Assume docker if unable to autodetect
+	container_runtime=docker
+    fi
+
+    if [[ $container_runtime == "podman" ]]; then
+	echo "Using podman as container runtime"
+    fi
+}
 
 if stat --format %i / >/dev/null 2>&1; then
     statformatarg="--format"
@@ -61,22 +81,36 @@ vexec () {
     "$@"
 }
 
+is_podman () {
+    if [[ $container_runtime == "podman" ]]; then
+	return 0
+    else
+	return 1
+    fi
+}
+
+do_info () {
+    echo "Expected container runtime:  ${container_runtime}"
+    $container_runtime --version
+    $container_runtime info
+}
+
 has_container() {
-    [ $( docker ps -a | grep $container_name | wc -l ) -gt 0 ]
+    [ $( $container_runtime ps -a | grep $container_name | wc -l ) -gt 0 ]
 }
 
 remove_containers() {
     local _name
     _name="${1:-${container_name}}"
     echo "Removing all existing ${container_name} containers..."
-    docker ps -a -f name=${_name} --format "{{.ID}}" | while read line ; do docker rm --force $line ; done
+    $container_runtime ps -a -f name=${_name} --format "{{.ID}}" | while read line ; do $container_runtime rm --force $line ; done
 }
 
 stop_container() {
     local _name
     _name="${1:-${container_name}}"
 
-    docker stop "${_name}"
+    $container_runtime stop "${_name}"
 }
 
 start_container() {
@@ -87,12 +121,12 @@ start_container() {
 	setup_xhost
     fi
 
-    docker start ${container_name}
+    $container_runtime start ${container_name}
     run_shell
 }
 
 run_in_container() {
-    docker exec -it $container_name $@
+    $container_runtime exec -it $container_name $@
 }
 
 run_shell() {
@@ -102,7 +136,7 @@ run_shell() {
 has_network() {
     local rv
     rv=0
-    $(docker network inspect "${network_name}" 2>&1 > /dev/null) || rv=$?
+    $($container_runtime network inspect "${network_name}" > /dev/null 2>&1) || rv=$?
     if [[ $rv == 0 ]]; then
 	return 0
     else
@@ -113,18 +147,18 @@ has_network() {
 create_network() {
     if ! has_network; then
 	echo "Creating container-local network ${network_name}"
-	docker network create "${network_name}"
+	$container_runtime network create "${network_name}"
     else
 	echo "Network ${network_name} already exists"
     fi
 }
 
 get_network_info() {
-    docker network inspect "${network_name}"
+    $container_runtime network inspect "${network_name}"
 }
 
 remove_network() {
-    docker network rm "${network_name}"
+    $container_runtime network rm "${network_name}"
 }
 
 xhost_warned=false
@@ -181,6 +215,17 @@ start_new_container() {
     add_port_if_open 6169
     add_port_if_open 12949
 
+    uidflags=
+    hostflags=
+    if is_podman; then
+	uidflags="--userns=keep-id"
+	user_home="/home/$USER"
+    else
+	user_home="/home/${default_user}"
+	hostflags="--add-host=host.docker.internal:host-gateway"
+    fi
+
+
     ssharg=
     sshenvarg=
     if test -n "$SSH_AUTH_SOCK" -a "`uname`" = Darwin; then
@@ -220,12 +265,13 @@ start_new_container() {
 
     create_network
 
-    vexec docker run -it \
+    vexec $container_runtime run -it \
           --name $container_name \
 	  --platform $platform \
 	  --network "${network_name}" --network-alias "[${container_name}]" \
-	  --add-host=host.docker.internal:host-gateway \
-	  --privileged --security-opt seccomp=unconfined \
+	  --privileged \
+	  $uidflags $hostflags \
+	  --security-opt seccomp=unconfined \
 	  --cap-add=SYS_PTRACE --cap-add=NET_ADMIN \
 	  -v "$maindir/home":"${user_home}" \
           -w "${user_home}" \
@@ -273,8 +319,8 @@ load_image()
 
     echo "Trying to load image at ${target}"
 
-    docker pull "${target}"
-    docker tag "${target}" "${image_name}:${tag}"
+    $container_runtime pull "${target}"
+    $container_runtime tag "${target}" "${image_name}:${tag}"
 }
 
 get_version_string()
@@ -293,12 +339,33 @@ get_version_string()
 
 build_image()
 {
+    local build_file_prefix
+    local build_user
+
+    if is_podman; then
+	build_file_prefix=Podmanfile
+	build_user=$USER
+    else
+	build_file_prefix=Dockerfile
+	build_user=$default_user
+    fi
+    
     # Add a version string so we can track the container version
     echo "image tag -> ${image_name}:${tag}"
     if test $platform = linux/arm64; then
-	docker build -t "${image_name}:${tag}" -f Dockerfile.arm64 --platform linux/arm64 .
+	if is_podman; then
+	    echo "Podman is not currently supported on arm64.  Please install docker."
+	    exit 1
+	fi
+	$container_runtime build -t "${image_name}:${tag}" \
+			   -f "${build_file_prefix}.arm64" --platform linux/arm64 \
+			   --build-arg USER=$build_user \
+			   .
     else
-	docker build -t "${image_name}:${tag}" -f Dockerfile --platform linux/amd64 .
+        $container_runtime build -t "${image_name}:${tag}" \
+			   -f "${build_file_prefix}" --platform linux/amd64 \
+			   --build-arg USER=$build_user \
+			   .
     fi
 }
 
@@ -317,16 +384,16 @@ push_image()
 {
     local target
     target="${image_url}:${tag}"
-    docker tag "${image_name}:${tag}" "${target}"
+    $container_runtime tag "${image_name}:${tag}" "${target}"
 
     echo "Pushing ${target}"
-    docker push "${target}"
+    $container_runtime push "${target}"
 }
 
 remove_image()
 {
-    docker image rm --force "${image_name}:${tag}"
-    docker image rm --force "${image_url}:${tag}"
+    $container_runtime image rm --force "${image_name}:${tag}"
+    $container_runtime image rm --force "${image_url}:${tag}"
 }
 
 do_help()
@@ -400,6 +467,7 @@ main()
     set -- "${POSITIONAL[@]}"
 
     __check_platform
+    __find_container_runtime
 
     # Default subcommand
     if [[ $# == 0 ]]; then
@@ -458,6 +526,10 @@ main()
 	    shift
 	    remove_containers "${container_name}"
 	    remove_image $@
+	    ;;
+	info)
+	    shift
+	    do_info $@
 	    ;;
 	*)
 	    echo "Invalid command $1"

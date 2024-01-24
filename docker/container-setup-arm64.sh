@@ -3,6 +3,7 @@
 set -eu
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)
+target_user="${1:-cs300-user}"
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -57,7 +58,7 @@ for i in addr2line c++filt cpp-11 g++-11 gcc-11 gcov-11 gcov-dump-11 gcov-tool-1
     ln -s /usr/bin/gdb-multiarch /usr/x86_64-linux-gnu/bin/gdb
 
 # Do main setup
-$SCRIPT_DIR/container-setup-common
+$SCRIPT_DIR/container-setup-common $target_user
 
 # create binary reporting version of dockerfile
 (echo '#\!/bin/sh'; echo 'if test "x$1" = x-n; then echo 1; else echo 1.arm64; fi') > /usr/bin/cs300-docker-version && chmod ugo+rx,u+w,go-w /usr/bin/cs300-docker-version

@@ -1,0 +1,20 @@
+FROM ubuntu:jammy
+
+LABEL org.opencontainers.image.source=https://github.com/csci0300/cs300-s24-devenv
+
+COPY container-setup-amd64.sh /usr/local/bin/container-setup-amd64
+COPY container-setup-common.sh /usr/local/bin/container-setup-common
+COPY fix-default-shell.sh /etc/profile.d/20-fix-default-shell.sh
+
+# set default locale
+ENV LANG en_US.UTF-8
+
+# git build arguments
+ARG USER
+ARG EMAIL=nobody@example.com
+
+RUN /usr/local/bin/container-setup-amd64 $USER
+
+
+WORKDIR /home/$USER
+CMD ["/bin/bash", "-l"]

@@ -3,11 +3,15 @@
 set -eu
 
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd)
+target_user="${1:-cs300-user}"
 
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update &&\
-  yes | unminimize
+    yes | unminimize
+
+apt-get -y install passwd sudo
+which useradd
 
 # install GCC-related packages
 apt-get update && apt-get -y install\
@@ -28,7 +32,7 @@ apt-get update && apt-get -y install\
 			  make-doc
 
 # Do main setup
-$SCRIPT_DIR/container-setup-common
+$SCRIPT_DIR/container-setup-common $target_user
 
 # create binary reporting version of dockerfile
 (echo '#\!/bin/sh'; echo 'echo 1') > /usr/bin/cs300-docker-version && chmod ugo+rx,u+w,go-w /usr/bin/cs300-docker-version
